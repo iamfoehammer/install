@@ -56,12 +56,18 @@ if (-not $wsl) {
 }
 
 # --- WSL command exists; is a real Linux distro installed? ---
-# 'wsl -l -q' lists installed distro names. Filter out the docker helper
-# distros and any blank lines (the output is UTF-16 with NUL bytes).
+# 'wsl -l -q' lists installed distro names, but wsl.exe emits UTF-16LE. Without
+# forcing the encoding, PowerShell reads "Ubuntu" as "U\0b\0u..." and a naive
+# NUL strip leaves just "U". Force UTF-8 output and strip any non-ASCII bytes so
+# the distro name survives intact.
+$env:WSL_UTF8 = '1'
 $distros = @()
 try {
+    $prevEnc = [Console]::OutputEncoding
+    try { [Console]::OutputEncoding = [System.Text.Encoding]::UTF8 } catch {}
     $raw = & wsl.exe -l -q 2>$null
-    $distros = $raw | ForEach-Object { ($_ -replace "`0","").Trim() } | Where-Object { $_ -ne '' }
+    try { [Console]::OutputEncoding = $prevEnc } catch {}
+    $distros = $raw | ForEach-Object { ($_ -replace '[^\x20-\x7E]','').Trim() } | Where-Object { $_ -ne '' }
 } catch {
     $distros = @()
 }
